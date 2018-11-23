@@ -24,7 +24,6 @@ set(nonowning_headers
   ${PROJECT_SOURCE_DIR}/include/nonowning.hpp
   ${PROJECT_SOURCE_DIR}/include/nonowning-detail.hpp)
 
-set(HEADERS include/nonowning.hpp include/nonowning-detail.hpp)
 add_library(nonowning_ptr INTERFACE)
 target_sources(nonowning_ptr INTERFACE ${nonowning_headers})
 

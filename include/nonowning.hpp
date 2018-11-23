@@ -257,11 +257,11 @@ NonOwning<PtrType *> operator-(IntType lhs, NonOwning<PtrType *> const & rhs) no
     auto operator oper(Type1 * lhs, NonOwning<Type2 *> const & rhs)     \
       returns(nown_detail::comparable_helper::name(lhs, rhs.get(), bool()));
 
-#define MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(oper, name)         \
+#define MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(oper, name)          \
     MIXED_MODE_NONOWNING_OPERATOR(oper, name);                          \
     template< typename Type >                                           \
     auto operator oper(NonOwning<Type *> const & lhs, std::nullptr_t)   \
-      returns(lhs.get() oper nullptr);                                    \
+      returns(lhs.get() oper nullptr);                                  \
                                                                         \
     template< typename Type >                                           \
     auto operator oper(std::nullptr_t, NonOwning<Type *> const & rhs)   \
