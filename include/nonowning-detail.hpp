@@ -7,11 +7,6 @@
 #ifndef NONOWNING_DETAIL_HPP
 #define NONOWNING_DETAIL_HPP
 
-// Make sure mixed-mode calls make the right conversions.  Without this, the
-// compiler will try to do a comparison through implicit conversion to void *.
-// Also, these will produce a compilation error if the comparison between raw
-// pointer types wouldn't be valid, citing "comparison between distinct pointer
-// types lacks a cast".
 #define COMPARABLE_HELPER_MEMBER(name, oper)                            \
     template< typename Type1, typename Type2 >                          \
     static bool name(Type1* lhs, Type2* rhs,                            \
@@ -19,8 +14,7 @@
         return lhs oper rhs;                                            \
     }                                                                   \
     template< typename Type1, typename Type2 > /* not defined */        \
-    static not_comparable name(Type1*, Type2*, bool_type)
-    ;
+    static not_comparable name(Type1*, Type2*, bool_type);
 
 namespace nown_detail {
 

@@ -463,12 +463,12 @@ Status test_mixed_types() {
         void const * cvptr = nb; (void)(cvptr = nb);
         B * back_to_normal = nb; (void)(back_to_normal = nb);
 
-		class Invisible;
+        class Invisible;
         NonOwning<Invisible *> invis;
         NonOwning<Invisible const *> cinvis;
 
-		ASSERT_DELETE_DOESNT_COMPILE(invis);
-		ASSERT_DELETE_DOESNT_COMPILE(cinvis);
+        ASSERT_DELETE_DOESNT_COMPILE(invis);
+        ASSERT_DELETE_DOESNT_COMPILE(cinvis);
 
         auto func = [](Invisible *) { };
         auto cfunc = [](Invisible const *) { };
