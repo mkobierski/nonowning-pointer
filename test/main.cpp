@@ -15,6 +15,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <iterator>
 
 using namespace std;
 using namespace nown;
@@ -83,6 +84,7 @@ Status test_void_compatibility(PtrType ptr, ConstRequired<true>) {
     return Status::ok();
 }
 
+// Passed pointer must be to an array of size 2 (otherwise UB).
 template< typename PtrType >
 void test_inc_and_dec(PtrType ptr) {
     cout << " test_inc_and_dec" << "\n";
@@ -93,6 +95,7 @@ void test_inc_and_dec(PtrType ptr) {
     assert(ptr == (void const *)(orig_val + times_incremented));
     assert((ptr - times_incremented) == orig_val);
     assert(orig_val == (ptr - times_incremented));
+    assert(ptr - orig_val == times_incremented);
     assert(!(ptr != (void const *)(orig_val + times_incremented) ));
     assert(ptr > vptr);
     assert(!(ptr <= vptr));
@@ -187,9 +190,6 @@ Status test_pointer() {
         test_void_compatibility(na, ConstRequired<prototype_is_const>());
         test_void_compatibility(noa, ConstRequired<prototype_is_const>());
 
-        test_inc_and_dec(na);
-        test_inc_and_dec(noa);
-
         test_auto_compatibility(na);
         test_auto_compatibility(noa);
 
@@ -215,6 +215,15 @@ Status test_pointer() {
         B * b = &b_dummy; (void) b;
         A * a = &a_dummy; (void) a;
         ASSERT_DOESNT_COMPILE(a != dependent(b));
+
+        PointeeType arr[2];
+        na = &arr[0];
+        noa = &arr[0];
+        test_inc_and_dec(na);
+        test_inc_and_dec(noa);
+
+        // Built-in types OK even though they don't have operator->* (MSVC).
+        NonOwning<int *> nint;
     }
     return Status::ok();
 }
@@ -415,6 +424,8 @@ Status test_mixed_types() {
 
         test_mixed_comparison(a, nullptr, expect_comparable());
         test_mixed_comparison(nullptr, a, expect_comparable());
+        test_mixed_comparison(na, nullptr, expect_comparable());
+        test_mixed_comparison(nullptr, na, expect_comparable());
 
         struct BB : B { };
 
@@ -501,8 +512,40 @@ Status test_swap() {
     return Status::ok();
 }
 
+
+class Widget {
+    // members, maybe pointer to implementation
+public:
+    Widget(unique_ptr<Widget> child = nullptr) {}
+    NonOwning<Widget *> get_child() const { return nullptr; }
+};
+
+void process(Widget *) { }
+void process_and_clear(NonOwning<Widget *> w) {
+    if (!w) { return; }
+    process_and_clear(w->get_child());
+    process(w);
+    ASSERT_DELETE_DOESNT_COMPILE(w); // definitely a mistake, won't compile!
+}
+
+Status test_iterator() {
+    int arr[3];
+    NonOwning<int*> iter = &arr[0];
+    advance(iter, 2);
+    assert(std::distance(&arr[0], iter.get()) == 2);
+    iter = next(iter);
+    iter = prev(iter);
+    iter = prev(iter);
+    iter = prev(iter);
+    assert(std::distance(&arr[0], iter.get()) == 0);
+    return Status::ok();
+}
+
 int main() {
+    Widget w;
+    process_and_clear(&w);
     try {
+        check(test_iterator());
         check(test_mixed_types());
         check(test_pointer<void>());
         check(test_pointer<void const>());

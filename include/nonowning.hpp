@@ -9,9 +9,10 @@
 
 #include "nonowning-detail.hpp"
 
-#include <cstddef> // std::nullptr_t
+#include <cstddef> // nullptr_t, ptrdiff_t
 #include <type_traits>
 #include <utility>
+#include <iterator>
 
 namespace nown { // nonowning
 
@@ -70,7 +71,7 @@ public:
       around this, explicit overloads for operator==() and the other comparison
       operators are also provided.
     */
-    constexpr operator bool() const noexcept { return ptr_; }
+    constexpr explicit operator bool() const noexcept { return ptr_; }
 
     /*
       Given a function like `void foo(int *) { }' and a `NonOwning<int*> ptr',
@@ -158,18 +159,18 @@ public:
       See Scott Meyers (though lambdas make it much easier!)
       http://www.aristeia.com/Papers/DDJ_Oct_1999.pdf
     */
-    template< typename ReturnType, typename...Args >
-    constexpr auto operator->*(ReturnType(Type::*pmf)(Args...)) const {
+    template< typename ReturnType, typename...Args, typename T = Type >
+    constexpr auto operator->*(ReturnType(T::*pmf)(Args...)) const {
         return [ptr = ptr_, pmf](Args... args)
           { return (ptr->*pmf)(std::forward<Args>(args)...); };
     }
-    template< typename ReturnType, typename...Args >
-    constexpr auto operator->*(ReturnType(Type::*pmf)(Args...) const) const {
+    template< typename ReturnType, typename...Args, typename T = Type>
+    constexpr auto operator->*(ReturnType(T::*pmf)(Args...) const) const {
         return [ptr = ptr_, pmf](Args... args)
           { return (ptr->*pmf)(std::forward<Args>(args)...); };
     }
-    template< typename MemType >
-    constexpr MemType operator->*(MemType Type::*pm) const {
+    template< typename MemType, typename T = Type>
+    constexpr MemType operator->*(MemType T::*pm) const {
         return ptr_->*pm;
     }
 #endif
@@ -182,11 +183,17 @@ public:
       TODO: Verify increment and decrement functionality through std::next()
       and std::prev() works by default.
     */
-    void operator++() noexcept { ++ptr_; }
-    NonOwning operator++(int) noexcept { return ptr_++; }
+    constexpr NonOwning& operator++() noexcept { return ++ptr_, *this; }
+    constexpr NonOwning operator++(int) noexcept { return ptr_++; }
+    constexpr NonOwning& operator+=(std::ptrdiff_t n) noexcept {
+        return ptr_ += n, *this;
+    }
 
-    void operator--() noexcept { --ptr_; }
-    NonOwning operator--(int) noexcept { return ptr_--; }
+    constexpr NonOwning& operator--() noexcept { return --ptr_, *this; }
+    constexpr NonOwning operator--(int) noexcept { return ptr_--; }
+    constexpr NonOwning& operator-=(std::ptrdiff_t n) noexcept {
+        return ptr_ -= n, *this;
+    }
 
 private:
     Type * ptr_{ nullptr };
@@ -201,26 +208,19 @@ T* get(NonOwning<T*> const & ptr) noexcept { return ptr.get(); }
 
   TODO: Verify std::advance behaves well with these.
 */
-template< typename PtrType, typename IntType >
-NonOwning<PtrType *> operator+(NonOwning<PtrType *> const & lhs, IntType rhs)
-  noexcept {
-    return lhs.get() + rhs;
-}
-template< typename PtrType, typename IntType >
-NonOwning<PtrType *> operator+(IntType lhs, NonOwning<PtrType *> const & rhs)
-  noexcept {
-    return lhs + rhs.get();
-}
+template< typename T >
+NonOwning<T *> operator+(NonOwning<T *> lhs, std::ptrdiff_t rhs) noexcept
+    { return lhs.get() + rhs; }
+template< typename T >
+NonOwning<T *> operator+(std::ptrdiff_t lhs, NonOwning<T *> rhs) noexcept
+    { return lhs + rhs.get(); }
 
-template< typename PtrType, typename IntType >
-NonOwning<PtrType *> operator-(NonOwning<PtrType *> const & lhs, IntType rhs) noexcept {
-    return lhs.get() - rhs;
-}
-template< typename PtrType, typename IntType >
-NonOwning<PtrType *> operator-(IntType lhs, NonOwning<PtrType *> const & rhs) noexcept {
-    return lhs - rhs.get();
-}
-
+template< typename T >
+NonOwning<T *> operator-(NonOwning<T *> lhs, std::ptrdiff_t rhs) noexcept
+    { return lhs.get() - rhs; }
+template< typename T >
+std::ptrdiff_t operator-(NonOwning<T *> lhs, NonOwning<T *> rhs) noexcept
+    { return lhs.get() - rhs.get(); }
 
 /*
   Make sure mixed-mode calls make the right conversions.  Without this, the
@@ -267,7 +267,6 @@ NonOwning<PtrType *> operator-(IntType lhs, NonOwning<PtrType *> const & rhs) no
     auto operator oper(std::nullptr_t, NonOwning<Type *> const & rhs)   \
       returns(nullptr oper rhs.get());
 
-
 MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(==, eq);
 MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(!=, ne);
 MIXED_MODE_NONOWNING_OPERATOR(<, lt);
@@ -291,6 +290,10 @@ template<typename T> struct
   remove_pointer<nown::NonOwning<T*> volatile> { using type = T; };
 template<typename T> struct
   remove_pointer<nown::NonOwning<T*> const volatile> { using type = T; };
+
+template< typename T > struct
+  iterator_traits< nown::NonOwning<T*> > : iterator_traits<T*>
+    { using pointer = nown::NonOwning<T*>; };
 
 } // namespace std
 
