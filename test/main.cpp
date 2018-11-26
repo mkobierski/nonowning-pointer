@@ -93,6 +93,9 @@ void test_inc_and_dec(PtrType ptr) {
     void const * vptr = ptr;
 
     auto orig_val = ptr++; ++ptr;
+    assert(&orig_val[0] == orig_val);
+    assert(&orig_val[2] == ptr);
+
     const int times_incremented = 2;
     assert(ptr == (void const *)(times_incremented + orig_val));
     assert(ptr == (void const *)(orig_val + times_incremented));

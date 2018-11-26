@@ -159,9 +159,8 @@ public:
           { return (ptr->*pmf)(std::forward<Args>(args)...); };
     }
     template< typename MemType, typename T = Type>
-    constexpr MemType operator->*(MemType T::*pm) const {
-        return ptr_->*pm;
-    }
+    constexpr MemType operator->*(MemType T::*pm) const
+        { return ptr_->*pm; }
 #endif
 
     /*
@@ -174,15 +173,16 @@ public:
     */
     constexpr NonOwningPtr& operator++() noexcept { return ++ptr_, *this; }
     constexpr NonOwningPtr operator++(int) noexcept { return ptr_++; }
-    constexpr NonOwningPtr& operator+=(std::ptrdiff_t n) noexcept {
-        return ptr_ += n, *this;
-    }
+    constexpr NonOwningPtr& operator+=(std::ptrdiff_t n) noexcept
+        { return ptr_ += n, *this; }
 
     constexpr NonOwningPtr& operator--() noexcept { return --ptr_, *this; }
     constexpr NonOwningPtr operator--(int) noexcept { return ptr_--; }
-    constexpr NonOwningPtr& operator-=(std::ptrdiff_t n) noexcept {
-        return ptr_ -= n, *this;
-    }
+    constexpr NonOwningPtr& operator-=(std::ptrdiff_t n) noexcept
+        { return ptr_ -= n, *this; }
+
+    constexpr Type & operator[](std::ptrdiff_t rhs) noexcept
+        { return ptr_[rhs]; }
 
 private:
     Type * ptr_{ nullptr };
