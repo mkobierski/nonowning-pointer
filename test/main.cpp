@@ -6,6 +6,8 @@
 
 #include "nonowning.hpp"
 #include "status.hpp"
+
+#define ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC
 #include "assert-tools.hpp"
 
 #include <cstdint>
@@ -89,6 +91,7 @@ template< typename PtrType >
 void test_inc_and_dec(PtrType ptr) {
     cout << " test_inc_and_dec" << "\n";
     void const * vptr = ptr;
+
     auto orig_val = ptr++; ++ptr;
     const int times_incremented = 2;
     assert(ptr == (void const *)(times_incremented + orig_val));
@@ -182,7 +185,7 @@ Status test_pointer() {
         using PointeeType = conditional_t<prototype_is_const, A const, A>;
 
         PointeeType * na = owner_a1.get();
-        NonOwning<PointeeType*> noa = owner_a2.get();
+        NonOwningPtr<PointeeType> noa = owner_a2.get();
 
         test_dereference(na);
         test_dereference(noa);
@@ -223,7 +226,7 @@ Status test_pointer() {
         test_inc_and_dec(noa);
 
         // Built-in types OK even though they don't have operator->* (MSVC).
-        NonOwning<int *> nint;
+        NonOwningPtr<int> nint; (void)nint;
     }
     return Status::ok();
 }
@@ -232,37 +235,37 @@ Status test_copy_and_move() {
     using namespace detail;
     {
         auto a = make_unique<A>();
-        NonOwning<A*> nopa = a.get();
+        NonOwningPtr<A> nopa = a.get();
         ASSERT_DELETE_DOESNT_COMPILE(nopa);
 
-        NonOwning<A*> const cnopa = nopa;
+        NonOwningPtr<A> const cnopa = nopa;
         ASSERT_DELETE_DOESNT_COMPILE(cnopa);
 
-        NonOwning<A const *> nopca1 = nopa; (void)nopca1;
+        NonOwningPtr<A const> nopca1 = nopa; (void)nopca1;
         ASSERT_DELETE_DOESNT_COMPILE(nopca1);
 
-        NonOwning<A const *> nopca2 = a.get(); (void)nopca2;
+        NonOwningPtr<A const> nopca2 = a.get(); (void)nopca2;
         ASSERT_DELETE_DOESNT_COMPILE(nopca1);
 
-        NonOwning<A const *> const cnopca = cnopa; (void)cnopca;
+        NonOwningPtr<A const> const cnopca = cnopa; (void)cnopca;
         ASSERT_DELETE_DOESNT_COMPILE(nopca2);
     }
     {
         auto a = make_unique<A>();
-        NonOwning<A*> nopa = a.get();
+        NonOwningPtr<A> nopa = a.get();
         auto copy = nopa;
-        NonOwning<A*> const cnopa = move(copy);
-        NonOwning<A const *> nopca1 = move(nopa); (void)nopca1;
-        NonOwning<A const *> nopca2 = a.get(); (void)nopca2;
-        NonOwning<A const *> const cnopca = move(cnopa); (void)cnopca;
+        NonOwningPtr<A> const cnopa = move(copy);
+        NonOwningPtr<A const> nopca1 = move(nopa); (void)nopca1;
+        NonOwningPtr<A const> nopca2 = a.get(); (void)nopca2;
+        NonOwningPtr<A const> const cnopca = move(cnopa); (void)cnopca;
     }
 
     struct NewA : A { };
     struct Unrelated;
 
-    NonOwning<NewA*> nopna = nullptr;
-    NonOwning<A*> nopa = nopna; (void)nopa;
-    ASSERT_DOESNT_COMPILE( NonOwning<Unrelated*>(dependent(nopa)) );
+    NonOwningPtr<NewA> nopna = nullptr;
+    NonOwningPtr<A> nopa = nopna; (void)nopa;
+    ASSERT_DOESNT_COMPILE( NonOwningPtr<Unrelated>(dependent(nopa)) );
 
     return Status::ok();
 }
@@ -302,13 +305,13 @@ Status test_call() {
     using namespace test_call_detail;
     {
         auto a = make_unique<A>();
-        NonOwning<A*> nopa = a.get();
+        NonOwningPtr<A> nopa = a.get();
         ASSERT_DELETE_DOESNT_COMPILE(nopa);
 
-        NonOwning<A*> const cnopa = nopa;
+        NonOwningPtr<A> const cnopa = nopa;
         ASSERT_DELETE_DOESNT_COMPILE(cnopa);
 
-        NonOwning<A const *> nopca = nopa; (void)nopca;
+        NonOwningPtr<A const> nopca = nopa; (void)nopca;
         ASSERT_DELETE_DOESNT_COMPILE(nopca);
 
         Tester t;
@@ -382,14 +385,14 @@ template< typename PtrType1, typename PtrType2 >
 Status test_mixed_comparison(PtrType1 ptr1, PtrType2 ptr2, expect_not_comparable) {
     // Cast to bool since these expressions should be usable in a bool context
     //
-    // In our case, if PtrType is NonOwning<Something*> and the mixed comparison
-    // will result in a comparison between incompatible pointer types, the
-    // result of the expression is of type comparable_helper::not_comparable,
-    // which is not convertible to bool.  By casting to bool here, we are able
-    // to figure this out "early".  Note that comparison between incompatible
-    // pointer types will compile so long as the result is not used, however
-    // will not link: the would-be invalid comparison function does not provide
-    // a definition.
+    // In our case, if PtrType is NonOwningPtr<Something> and the mixed
+    // comparison will result in a comparison between incompatible pointer
+    // types, the result of the expression is of type
+    // comparable_helper::not_comparable, which is not convertible to bool.  By
+    // casting to bool here, we are able to figure this out "early".  Note that
+    // comparison between incompatible pointer types will compile so long as the
+    // result is not used, however will not link: the would-be invalid
+    // comparison function does not provide a definition.
     //
     ASSERT_DOESNT_COMPILE((bool)(ptr1 == dependent(ptr2)));
     ASSERT_DOESNT_COMPILE((bool)(ptr1 != dependent(ptr2)));
@@ -411,8 +414,8 @@ Status test_mixed_types() {
         A * a = a_owner.get();
         B * b = b_owner.get();
 
-        NonOwning<A *> na = a;
-        NonOwning<B *> nb = b;
+        NonOwningPtr<A> na = a;
+        NonOwningPtr<B> nb = b;
 
         test_mixed_comparison(a, b, expect_not_comparable());
         test_mixed_comparison(na, nb, expect_not_comparable());
@@ -431,7 +434,7 @@ Status test_mixed_types() {
 
         auto bb_owner = make_unique<BB>();
         BB * bb = bb_owner.get();
-        NonOwning<BB *> nbb = bb;
+        NonOwningPtr<BB> nbb = bb;
         (void) nbb;
 
         assert(bb != b);
@@ -445,28 +448,28 @@ Status test_mixed_types() {
         ASSERT_DOESNT_COMPILE((bool)(nbb == dependent(a)));
         ASSERT_DOESNT_COMPILE((bool)(a == dependent(nbb)));
 
-        ASSERT_DOESNT_COMPILE(NonOwning<B *>(dependent(a)));
-        ASSERT_DOESNT_COMPILE(NonOwning<B *>(dependent(na)));
-        NonOwning<B *> nb2 = b;
+        ASSERT_DOESNT_COMPILE(NonOwningPtr<B>(dependent(a)));
+        ASSERT_DOESNT_COMPILE(NonOwningPtr<B>(dependent(na)));
+        NonOwningPtr<B> nb2 = b;
         nb2 = b;
-        NonOwning<B *> nb3 = nb;
+        NonOwningPtr<B> nb3 = nb;
         nb3 = nb;
-        NonOwning<B *> nb4 = nbb;
+        NonOwningPtr<B> nb4 = nbb;
         nb4 = nbb;
-        NonOwning<B const *> nb5 = nbb;
+        NonOwningPtr<B const> nb5 = nbb;
         nb5 = nbb;
-        NonOwning<BB const *> ncbb = nbb;
+        NonOwningPtr<BB const> ncbb = nbb;
         ncbb = nbb;
 
-        ASSERT_DOESNT_COMPILE(NonOwning<BB *>(dependent(ncbb)));
-        NonOwning<BB*> nbb2;
+        ASSERT_DOESNT_COMPILE(NonOwningPtr<BB>(dependent(ncbb)));
+        NonOwningPtr<BB> nbb2;
         ASSERT_DOESNT_COMPILE(nbb2 = dependent(ncbb));
-        ASSERT_DOESNT_COMPILE(NonOwning<B *>(dependent(ncbb)));
-        NonOwning<B *> nb6;
+        ASSERT_DOESNT_COMPILE(NonOwningPtr<B>(dependent(ncbb)));
+        NonOwningPtr<B> nb6;
         ASSERT_DOESNT_COMPILE(nb6 = dependent(ncbb));
 
         struct BBx : B { };
-        NonOwning<BBx*> nbbx;
+        NonOwningPtr<BBx> nbbx;
         ASSERT_DOESNT_COMPILE((bool)(nbbx == dependent(nbb)));
 
 
@@ -475,8 +478,8 @@ Status test_mixed_types() {
         B * back_to_normal = nb; (void)(back_to_normal = nb);
 
         class Invisible;
-        NonOwning<Invisible *> invis;
-        NonOwning<Invisible const *> cinvis;
+        NonOwningPtr<Invisible> invis;
+        NonOwningPtr<Invisible const> cinvis;
 
         ASSERT_DELETE_DOESNT_COMPILE(invis);
         ASSERT_DELETE_DOESNT_COMPILE(cinvis);
@@ -503,8 +506,8 @@ Status test_swap() {
     using namespace detail;
 
     A a_dummy;
-    NonOwning<A*> a1 = &a_dummy;
-    NonOwning<A*> a2;
+    NonOwningPtr<A> a1 = &a_dummy;
+    NonOwningPtr<A> a2;
     swap(a1, a2);
     assert(a1 == nullptr);
     assert(a2 == &a_dummy);
@@ -516,28 +519,28 @@ Status test_swap() {
 class Widget {
     // members, maybe pointer to implementation
 public:
-    Widget(unique_ptr<Widget> child = nullptr) {}
-    NonOwning<Widget *> get_child() const { return nullptr; }
+    NonOwningPtr<Widget> get_child() const { return nullptr; }
 };
 
 void process(Widget *) { }
-void process_and_clear(NonOwning<Widget *> w) {
+void process_and_clear(NonOwningPtr<Widget> w) {
     if (!w) { return; }
     process_and_clear(w->get_child());
     process(w);
-    ASSERT_DELETE_DOESNT_COMPILE(w); // definitely a mistake, won't compile!
+    // delete w; // definitely a mistake, won't compile!
+    ASSERT_DELETE_DOESNT_COMPILE(w);
 }
 
 Status test_iterator() {
     int arr[3];
-    NonOwning<int*> iter = &arr[0];
+    NonOwningPtr<int> iter = &arr[0];
     advance(iter, 2);
-    assert(std::distance(&arr[0], iter.get()) == 2);
+    assert(distance(&arr[0], iter.get()) == 2);
     iter = next(iter);
     iter = prev(iter);
     iter = prev(iter);
     iter = prev(iter);
-    assert(std::distance(&arr[0], iter.get()) == 0);
+    assert(distance(&arr[0], iter.get()) == 0);
     return Status::ok();
 }
 

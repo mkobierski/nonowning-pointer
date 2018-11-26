@@ -16,10 +16,8 @@
 
 namespace nown { // nonowning
 
-template< typename T > class NonOwning;
-
 template< typename Type >
-class NonOwning<Type *> {
+class NonOwningPtr {
     class delete_ambiguifier;
 
     enum { is_const = std::is_const<Type>::value };
@@ -32,66 +30,57 @@ public:
     /*
       Constructors:
 
-      We should support the implicit conversion of a bare pointer to a NonOwning
-      pointer, therefore the single-parameter constructor is not explicit.  By
-      default, a constructed NonOwning pointer is equal to nullptr.
+      We should support the implicit conversion of a bare pointer to a
+      NonOwningPtr pointer, therefore the single-parameter constructor is not
+      explicit.  By default, a constructed NonOwningPtr is equal to nullptr.
 
-      It should also be possible to construct a given NonOwning pointer from a
-      NonOwning pointer for another type given that the underlying source
-      pointer can be converted to the destination's underlying pointer.  A
-      templated constructor provides this functionality.
+      It should also be possible to construct a given NonOwningPtr from a
+      NonOwningPtr for another type given that the underlying source pointer can
+      be converted to the destination's underlying pointer.  A templated
+      constructor provides this functionality.
 
       Note that copying and moving should amount to the same thing (same
-      performance), as the NonOwning class only holds a single member: a
+      performance), as the NonOwningPtr class only holds a single member: a
       pointer.  This means we don't have to explicitly declare and default the
       copy/move constructors and assignment operators to protect against future
       addition of a destructor (for example if we want to log destructions) that
       might inadvertently disable the move ops.  Even if this happens, the
       performace should remain unchanged.
     */
-    constexpr NonOwning(Type * ptr = nullptr) noexcept : ptr_(ptr) { }
+    constexpr NonOwningPtr(Type * ptr = nullptr) noexcept : ptr_(ptr) { }
 
     template<typename OtherType,
         typename = typename std::
             enable_if<std::is_convertible<OtherType *, Type *>::value>::type>
-    constexpr NonOwning(NonOwning<OtherType *> const & other) noexcept
+    constexpr NonOwningPtr(NonOwningPtr<OtherType> const & other) noexcept
       : ptr_(other.get()) { }
 
     /*
       A typical use case for a pointer is checking whether it is null or not.
-      We want to support this use case, so provide an implicit conversion to
+      We want to support this use case, so provide an explicit conversion to
       bool.
-
-      Note that we will have to be careful about prohibiting usage where
-      implicit conversion to bool isn't appropriate, for example in the
-      expression `if(ptr == NULL) { }' where ptr is a NonOwning<> pointer.
-      Since NULL's type is int (or long int), the called operator would actually
-      be `operator==(int, int)', where an implicit conversion through bool is
-      used for the first parameter to get from NonOwning<> to int.  To get
-      around this, explicit overloads for operator==() and the other comparison
-      operators are also provided.
     */
     constexpr explicit operator bool() const noexcept { return ptr_; }
 
     /*
-      Given a function like `void foo(int *) { }' and a `NonOwning<int*> ptr',
+      Given a function like `void foo(int *) { }' and a `NonOwningPtr<int> ptr',
       we want to support calls like `foo(ptr)'.  This is achievable by providing
       an implicit conversion to the underlying pointer type.
 
       Note that this also makes the delete-expression `delete ptr' valid, since
       the first step of a delete-expression is to implicitly convert the operand
-      (in this case a NonOwning pointer) to a pointer-to-object.  These are
-      prevented by ambiguating the implicit conversion (see below).
+      (in this case a NonOwningPtr) to a pointer-to-object.  These are prevented
+      by ambiguating the implicit conversion (see below).
     */
     constexpr operator Type * () const noexcept { return ptr_; }
 
     /*
-      The entire motivation of the NonOwning pointer class is to prevent a user
-      from deleting a resource explicitly owned by somebody else.  As noted
-      above, implicit conversion to the underlying pointer type makes the
-      expression `delete ptr' valid, so the goal here is to make in ill formed
-      due to ambiguation.  If the compiler can't figure out how to conver a
-      class type to a pointer-to-object, how can the object be deleted?
+      The entire motivation of the NonOwningPtr class is to prevent a user from
+      deleting a resource explicitly owned by somebody else.  As noted above,
+      implicit conversion to the underlying pointer type makes the expression
+      `delete ptr' valid, so the goal here is to make in ill formed due to
+      ambiguation.  If the compiler can't figure out how to conver a class type
+      to a pointer-to-object, how can the object be deleted?
 
       To ambiguate, we provide an (undefined) implicit conversion to a pointer
       to private and undefined type `delete_ambiguifier'.  The
@@ -99,20 +88,20 @@ public:
       this is required, consider the following case if it weren't.
 
           void foo() {
-              NonOwning<int const *> pci; // pointer to const int
+              NonOwningPtr<int const> pci; // pointer to const int
               void * v = pci; // discards const qualifier
           }
 
-      The class NonOwning<int const *> has a conversion operator to int const *,
-      but further convering that to a void * discards the const qualifier and is
-      therefore disallowed.  However, since we are providing a conversion from
-      NonOwning<int const *> to pointer to (hypothetically) non-const
+      The class NonOwningPtr<int const> has a conversion operator to int const*,
+      but further converting that to a void * discards the const qualifier and
+      is therefore disallowed.  However, since we are providing a conversion
+      from NonOwningPtr<int const> to pointer to (hypothetically) non-const
       `delete_ambiguifier', that following conversion sequence works:
 
-          NonOwning<int const *> -> delete_ambiguifier * -> void *
+          NonOwningPtr<int const> -> delete_ambiguifier * -> void *
 
       To prevent this at link time, the conversion to delete_ambiguifier is left
-      undefined.  By making it at least a cv-qualified as the NonOwning's
+      undefined.  By making it at least a cv-qualified as the NonOwningPtr's
       pointee-type, though, the conversion will also be disallowed at compile
       time.  We don't lose the desired effect of ambiguifying delete
       expressions, since in that case const and volatile qualifiers are ignored.
@@ -149,7 +138,7 @@ public:
       The member-function ones must be usable like this:
 
           class A { void foo(); }
-          NonOwning<A*> a;
+          NonOwningPtr<A> a;
           auto pfoo = &A::foo;
           (a->*pfoo)(); // equivalent to operator->*(a, pfoo)()
 
@@ -177,21 +166,21 @@ public:
 
     /*
       Just as bare pointers are forward and reverse iterators, so should be
-      NonOwning pointers.  Support this through prefix and postfix operator++
-      and operator--.
+      NonOwningPtrs.  Support this through prefix and postfix operator++
+      and operator--, as well as operator+= and operator-=.
 
-      TODO: Verify increment and decrement functionality through std::next()
-      and std::prev() works by default.
+      Note to the implementer: the comma operator is used to meet the
+      single-expression requirement on constexpr functions in C++11.
     */
-    constexpr NonOwning& operator++() noexcept { return ++ptr_, *this; }
-    constexpr NonOwning operator++(int) noexcept { return ptr_++; }
-    constexpr NonOwning& operator+=(std::ptrdiff_t n) noexcept {
+    constexpr NonOwningPtr& operator++() noexcept { return ++ptr_, *this; }
+    constexpr NonOwningPtr operator++(int) noexcept { return ptr_++; }
+    constexpr NonOwningPtr& operator+=(std::ptrdiff_t n) noexcept {
         return ptr_ += n, *this;
     }
 
-    constexpr NonOwning& operator--() noexcept { return --ptr_, *this; }
-    constexpr NonOwning operator--(int) noexcept { return ptr_--; }
-    constexpr NonOwning& operator-=(std::ptrdiff_t n) noexcept {
+    constexpr NonOwningPtr& operator--() noexcept { return --ptr_, *this; }
+    constexpr NonOwningPtr operator--(int) noexcept { return ptr_--; }
+    constexpr NonOwningPtr& operator-=(std::ptrdiff_t n) noexcept {
         return ptr_ -= n, *this;
     }
 
@@ -200,26 +189,28 @@ private:
 };
 
 template< typename T >
-T* get(NonOwning<T*> const & ptr) noexcept { return ptr.get(); }
+constexpr T* get(NonOwningPtr<T> ptr) noexcept { return ptr.get(); }
 
 /*
   A pointer is also a RandomAccessIterator, so it makes sense to provide
   operator+ and operator-.
 
-  TODO: Verify std::advance behaves well with these.
+  Note that the parameters are by value, instead of by reference.  Performance
+  shouldn't be impacted, since NonOwningPtr is small.  If profiling shows that
+  this should be const &, then it can be changed at a later date.
 */
-template< typename T >
-NonOwning<T *> operator+(NonOwning<T *> lhs, std::ptrdiff_t rhs) noexcept
+template< typename T > constexpr
+NonOwningPtr<T> operator+(NonOwningPtr<T> lhs, std::ptrdiff_t rhs) noexcept
     { return lhs.get() + rhs; }
-template< typename T >
-NonOwning<T *> operator+(std::ptrdiff_t lhs, NonOwning<T *> rhs) noexcept
+template< typename T > constexpr
+NonOwningPtr<T> operator+(std::ptrdiff_t lhs, NonOwningPtr<T> rhs) noexcept
     { return lhs + rhs.get(); }
 
-template< typename T >
-NonOwning<T *> operator-(NonOwning<T *> lhs, std::ptrdiff_t rhs) noexcept
+template< typename T > constexpr
+NonOwningPtr<T> operator-(NonOwningPtr<T> lhs, std::ptrdiff_t rhs) noexcept
     { return lhs.get() - rhs; }
-template< typename T >
-std::ptrdiff_t operator-(NonOwning<T *> lhs, NonOwning<T *> rhs) noexcept
+template< typename T > constexpr
+std::ptrdiff_t operator-(NonOwningPtr<T> lhs, NonOwningPtr<T> rhs) noexcept
     { return lhs.get() - rhs.get(); }
 
 /*
@@ -233,7 +224,7 @@ std::ptrdiff_t operator-(NonOwning<T *> lhs, NonOwning<T *> rhs) noexcept
   succeed using a SFINAE context, like this:
 
       std::is_same<decltype(
-          std::declval<NonOwning<int*>>() == std::declval<double*>()
+          std::declval<NonOwningPtr<int>>() == std::declval<double*>()
       ), bool>::value
 
   Value will be false in this case since the comparison isn't valid, and will
@@ -246,25 +237,25 @@ std::ptrdiff_t operator-(NonOwning<T *> lhs, NonOwning<T *> rhs) noexcept
 
 #define MIXED_MODE_NONOWNING_OPERATOR(oper, name)                       \
     template< typename Type1, typename Type2 >                          \
-    auto operator oper(NonOwning<Type1 *> const & lhs, NonOwning<Type2 *> const & rhs) \
+    auto operator oper(NonOwningPtr<Type1> lhs, NonOwningPtr<Type2> rhs) \
       returns(nown_detail::comparable_helper::name(lhs.get(), rhs.get(), bool())); \
                                                                         \
     template< typename Type1, typename Type2 >                          \
-    auto operator oper(NonOwning<Type1 *> const & lhs , Type2 * rhs)    \
+    auto operator oper(NonOwningPtr<Type1> lhs , Type2 * rhs)    \
       returns(nown_detail::comparable_helper::name(lhs.get(), rhs, bool())); \
                                                                         \
     template< typename Type1, typename Type2 >                          \
-    auto operator oper(Type1 * lhs, NonOwning<Type2 *> const & rhs)     \
+    auto operator oper(Type1 * lhs, NonOwningPtr<Type2> rhs)     \
       returns(nown_detail::comparable_helper::name(lhs, rhs.get(), bool()));
 
 #define MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(oper, name)          \
     MIXED_MODE_NONOWNING_OPERATOR(oper, name);                          \
     template< typename Type >                                           \
-    auto operator oper(NonOwning<Type *> const & lhs, std::nullptr_t)   \
+    auto operator oper(NonOwningPtr<Type> lhs, std::nullptr_t)   \
       returns(lhs.get() oper nullptr);                                  \
                                                                         \
     template< typename Type >                                           \
-    auto operator oper(std::nullptr_t, NonOwning<Type *> const & rhs)   \
+    auto operator oper(std::nullptr_t, NonOwningPtr<Type> rhs)   \
       returns(nullptr oper rhs.get());
 
 MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(==, eq);
@@ -283,17 +274,17 @@ MIXED_MODE_NONOWNING_OPERATOR(>=, ge);
 namespace std {
 
 template<typename T> struct
-  remove_pointer<nown::NonOwning<T*>> { using type = T; };
+  remove_pointer<nown::NonOwningPtr<T>> { using type = T; };
 template<typename T> struct
-  remove_pointer<nown::NonOwning<T*> const> { using type = T; };
+  remove_pointer<nown::NonOwningPtr<T> const> { using type = T; };
 template<typename T> struct
-  remove_pointer<nown::NonOwning<T*> volatile> { using type = T; };
+  remove_pointer<nown::NonOwningPtr<T> volatile> { using type = T; };
 template<typename T> struct
-  remove_pointer<nown::NonOwning<T*> const volatile> { using type = T; };
+  remove_pointer<nown::NonOwningPtr<T> const volatile> { using type = T; };
 
 template< typename T > struct
-  iterator_traits< nown::NonOwning<T*> > : iterator_traits<T*>
-    { using pointer = nown::NonOwning<T*>; };
+  iterator_traits< nown::NonOwningPtr<T> > : iterator_traits<T*>
+    { using pointer = nown::NonOwningPtr<T>; };
 
 } // namespace std
 

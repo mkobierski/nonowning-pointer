@@ -64,7 +64,6 @@
 
   Based off of Johan Lundberg's Stack Overflow post.
   https://stackoverflow.com/a/49090642
-
 */
 #ifdef _MSC_VER
 #define ASSERT_DOESNT_COMPILE(expr)                                 \
@@ -111,8 +110,54 @@
   https://stackoverflow.com/q/53293359
 */
 #if defined(__GNUG__) && !defined(__clang__) // Clang also defines __GNUG__
+#ifdef ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC
 #define ASSERT_DELETE_DOESNT_COMPILE(expr)
+#else
+/*
+  Explanation for the maintainer: since GCC doesn't handle delete-expressions
+  in a way that lets us check their validity in a SFINAE context (see above),
+  we should make sure the user knows that the statements
+  ASSERT_DELETE_DOESNT_COMPILE() don't actually assert anything.
 
+  We want this to be a (GCC specific) warning - one that is enabled by
+  default.  Since GCC warns about comparisons between unrelated enum types, we
+  can leverage that to give the unknowing user a diagnostic message that looks
+  like this:
+
+    In file included from main.cpp:
+    main.cpp: In function ‘Status test_copy_and_move()’:
+    assert-tools.hpp: warning: comparison between
+      ‘enum ASSERT_DELETE_DOESNT_COMPILE_warning::the_macro_ASSERT_DELETE_DOESNT_COMPILE_doesnt_work_with_gcc’
+      and ‘enum ASSERT_DELETE_DOESNT_COMPILE_solution::the_solution::is’ [-Wenum-compare]
+             you_should_define -> ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC < to_disable_this_warning._  \
+                                                                                      ^
+    main.cpp: note: in expansion of macro ‘ASSERT_DELETE_DOESNT_COMPILE’
+             ASSERT_DELETE_DOESNT_COMPILE(my_var);
+             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  Once the user defines ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC, the warnings will
+  disappear.
+
+  The warning is hopefully clear, however the implementation is admittedly a bit
+  funky.
+*/
+namespace ASSERT_DELETE_DOESNT_COMPILE_warning {
+  enum the_macro_ASSERT_DELETE_DOESNT_COMPILE_doesnt_work_with_gcc { };
+  struct {
+      the_macro_ASSERT_DELETE_DOESNT_COMPILE_doesnt_work_with_gcc
+        ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC;
+  } dummy, *you_should_define = &dummy;
+}
+namespace ASSERT_DELETE_DOESNT_COMPILE_solution {
+  struct the_solution { enum is { _ }; } to_disable_this_warning;
+}
+#define ASSERT_DELETE_DOESNT_COMPILE(expr)                              \
+    {                                                                   \
+        using namespace ASSERT_DELETE_DOESNT_COMPILE_warning;           \
+        using namespace ASSERT_DELETE_DOESNT_COMPILE_solution;          \
+        you_should_define -> ALLOW_EMPTY_DELETE_ASSERT_FOR_GCC < to_disable_this_warning._ \
+            ;}
+#endif
 #else // Clang and MSVC handle this well.
 #define ASSERT_DELETE_DOESNT_COMPILE(expr) \
     ASSERT_DOESNT_COMPILE(delete dependent(expr))
@@ -212,8 +257,6 @@ constexpr auto is_compilable(F&&) -> compilation_tester<F> {
     static_assert(
       std::is_same_v<
         std::false_type, decltype(equality_possible((B*){}, (C*){}))>);
-
-
 */
 
 struct equality_tester {
