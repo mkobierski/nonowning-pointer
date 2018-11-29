@@ -11,8 +11,21 @@
 
 #include <cstddef> // nullptr_t, ptrdiff_t
 #include <type_traits>
-#include <utility>
 #include <iterator>
+#include <functional> // std::hash
+
+#ifdef _MSC_VER
+#include <utility>
+#endif
+
+#if __cplusplus < 201103L
+#error "Minimum version requirement not met: C++11"
+#elif __cplusplus == 201103L
+// constexpr in C++11 implies const, but this requirement was lifted in C++14.
+#define nown_mutable_constexpr
+#else
+#define nown_mutable_constexpr constexpr
+#endif
 
 namespace nown { // nonowning
 
@@ -20,13 +33,20 @@ template< typename Type >
 class NonOwningPtr {
     class delete_ambiguifier;
 
-    enum { is_const = std::is_const<Type>::value };
+public:
+    // Follow the convention set by the standard library pointers.
+    using element_type = typename std::remove_reference<Type>::type;
+    using pointer = typename std::add_pointer<element_type>::type;
+    using element_lvalue_ref = typename
+        std::add_lvalue_reference<element_type>::type;
+
+private:
+    enum { is_const = std::is_const<element_type>::value };
     using void_type = typename std::conditional<is_const, const void, void
         >::type;
+    using void_ptr = typename std::add_pointer<void_type>::type;
 
 public:
-    using PointeeType = Type;
-
     /*
       Constructors:
 
@@ -47,11 +67,12 @@ public:
       might inadvertently disable the move ops.  Even if this happens, the
       performace should remain unchanged.
     */
-    constexpr NonOwningPtr(Type * ptr = nullptr) noexcept : ptr_(ptr) { }
+    constexpr NonOwningPtr(pointer ptr = nullptr) noexcept : ptr_(ptr) { }
 
-    template<typename OtherType,
-        typename = typename std::
-            enable_if<std::is_convertible<OtherType *, Type *>::value>::type>
+    template<typename OtherType, typename = typename std::
+        enable_if<std::is_convertible<
+                      typename NonOwningPtr<OtherType>::pointer, pointer
+                      >::value>::type >
     constexpr NonOwningPtr(NonOwningPtr<OtherType> const & other) noexcept
       : ptr_(other.get()) { }
 
@@ -72,7 +93,7 @@ public:
       (in this case a NonOwningPtr) to a pointer-to-object.  These are prevented
       by ambiguating the implicit conversion (see below).
     */
-    constexpr operator Type * () const noexcept { return ptr_; }
+    constexpr operator pointer () const noexcept { return ptr_; }
 
     /*
       The entire motivation of the NonOwningPtr class is to prevent a user from
@@ -113,14 +134,14 @@ public:
       ambiguifies this case.
       TODO: explain better.
     */
-    constexpr operator void_type * () const noexcept { return ptr_; }
+    constexpr operator void_ptr () const noexcept { return ptr_; }
 
     /*
       Normal smart pointer interface, and easy access to underlying pointer.
     */
-    constexpr Type * operator->() const noexcept { return ptr_; }
-    constexpr Type & operator*() const noexcept { return *ptr_; }
-    constexpr Type * get() const noexcept { return ptr_; }
+    constexpr pointer operator->() const noexcept { return ptr_; }
+    constexpr element_lvalue_ref operator*() const noexcept { return *ptr_; }
+    constexpr pointer get() const noexcept { return ptr_; }
 
 #ifdef _MSC_VER
     /*
@@ -171,25 +192,30 @@ public:
       Note to the implementer: the comma operator is used to meet the
       single-expression requirement on constexpr functions in C++11.
     */
-    constexpr NonOwningPtr& operator++() noexcept { return ++ptr_, *this; }
-    constexpr NonOwningPtr operator++(int) noexcept { return ptr_++; }
-    constexpr NonOwningPtr& operator+=(std::ptrdiff_t n) noexcept
+    nown_mutable_constexpr NonOwningPtr& operator++() noexcept
+        { return ++ptr_, *this; }
+    nown_mutable_constexpr NonOwningPtr operator++(int) noexcept
+        { return ptr_++; }
+    nown_mutable_constexpr NonOwningPtr& operator+=(std::ptrdiff_t n) noexcept
         { return ptr_ += n, *this; }
 
-    constexpr NonOwningPtr& operator--() noexcept { return --ptr_, *this; }
-    constexpr NonOwningPtr operator--(int) noexcept { return ptr_--; }
-    constexpr NonOwningPtr& operator-=(std::ptrdiff_t n) noexcept
+    nown_mutable_constexpr NonOwningPtr& operator--() noexcept
+        { return --ptr_, *this; }
+    nown_mutable_constexpr NonOwningPtr operator--(int) noexcept
+        { return ptr_--; }
+    nown_mutable_constexpr NonOwningPtr& operator-=(std::ptrdiff_t n) noexcept
         { return ptr_ -= n, *this; }
 
-    constexpr Type & operator[](std::ptrdiff_t rhs) noexcept
+    constexpr element_lvalue_ref operator[](std::ptrdiff_t rhs) const noexcept
         { return ptr_[rhs]; }
 
 private:
-    Type * ptr_{ nullptr };
+    pointer ptr_{ nullptr };
 };
 
-template< typename T >
-constexpr T* get(NonOwningPtr<T> ptr) noexcept { return ptr.get(); }
+template< typename T > constexpr
+  auto get(NonOwningPtr<T> ptr) noexcept -> typename NonOwningPtr<T>::pointer
+    { return ptr.get(); }
 
 /*
   A pointer is also a RandomAccessIterator, so it makes sense to provide
@@ -236,26 +262,26 @@ std::ptrdiff_t operator-(NonOwningPtr<T> lhs, NonOwningPtr<T> rhs) noexcept
 #define returns(expr) -> decltype(expr) { return expr; }
 
 #define MIXED_MODE_NONOWNING_OPERATOR(oper, name)                       \
-    template< typename Type1, typename Type2 >                          \
-    auto operator oper(NonOwningPtr<Type1> lhs, NonOwningPtr<Type2> rhs) \
+    template< typename Type1, typename Type2 > constexpr auto           \
+    operator oper(NonOwningPtr<Type1> lhs, NonOwningPtr<Type2> rhs) noexcept \
       returns(nown_detail::comparable_helper::name(lhs.get(), rhs.get(), bool())); \
                                                                         \
-    template< typename Type1, typename Type2 >                          \
-    auto operator oper(NonOwningPtr<Type1> lhs , Type2 * rhs)    \
+    template< typename Type1, typename Type2 > constexpr auto           \
+    operator oper(NonOwningPtr<Type1> lhs , Type2 * rhs)   noexcept     \
       returns(nown_detail::comparable_helper::name(lhs.get(), rhs, bool())); \
                                                                         \
-    template< typename Type1, typename Type2 >                          \
-    auto operator oper(Type1 * lhs, NonOwningPtr<Type2> rhs)     \
+    template< typename Type1, typename Type2 > constexpr auto           \
+    operator oper(Type1 * lhs, NonOwningPtr<Type2> rhs) noexcept        \
       returns(nown_detail::comparable_helper::name(lhs, rhs.get(), bool()));
 
-#define MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(oper, name)          \
-    MIXED_MODE_NONOWNING_OPERATOR(oper, name);                          \
-    template< typename Type >                                           \
-    auto operator oper(NonOwningPtr<Type> lhs, std::nullptr_t)   \
-      returns(lhs.get() oper nullptr);                                  \
-                                                                        \
-    template< typename Type >                                           \
-    auto operator oper(std::nullptr_t, NonOwningPtr<Type> rhs)   \
+#define MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(oper, name)      \
+    MIXED_MODE_NONOWNING_OPERATOR(oper, name);                      \
+    template< typename Type > constexpr auto                        \
+    operator oper(NonOwningPtr<Type> lhs, std::nullptr_t) noexcept  \
+      returns(lhs.get() oper nullptr);                              \
+                                                                    \
+    template< typename Type > constexpr auto                        \
+    operator oper(std::nullptr_t, NonOwningPtr<Type> rhs) noexcept  \
       returns(nullptr oper rhs.get());
 
 MIXED_MODE_WITH_NULLPTR_NONOWNING_OPERATOR(==, eq);
@@ -273,18 +299,21 @@ MIXED_MODE_NONOWNING_OPERATOR(>=, ge);
 
 namespace std {
 
-template<typename T> struct
-  remove_pointer<nown::NonOwningPtr<T>> { using type = T; };
-template<typename T> struct
-  remove_pointer<nown::NonOwningPtr<T> const> { using type = T; };
-template<typename T> struct
-  remove_pointer<nown::NonOwningPtr<T> volatile> { using type = T; };
-template<typename T> struct
-  remove_pointer<nown::NonOwningPtr<T> const volatile> { using type = T; };
+template<typename T> struct remove_pointer<nown::NonOwningPtr<T>>
+    { using type = typename nown::NonOwningPtr<T>::element_type; };
+template<typename T> struct remove_pointer<nown::NonOwningPtr<T> const>
+    { using type = typename nown::NonOwningPtr<T>::element_type; };
+template<typename T> struct remove_pointer<nown::NonOwningPtr<T> volatile>
+    { using type = typename nown::NonOwningPtr<T>::element_type; };
+template<typename T> struct remove_pointer<nown::NonOwningPtr<T> const volatile>
+    { using type = typename nown::NonOwningPtr<T>::element_type; };
 
-template< typename T > struct
-  iterator_traits< nown::NonOwningPtr<T> > : iterator_traits<T*>
+template< typename T > struct iterator_traits< nown::NonOwningPtr<T> >
+: iterator_traits<typename nown::NonOwningPtr<T>::pointer >
     { using pointer = nown::NonOwningPtr<T>; };
+
+template< typename T > struct hash< nown::NonOwningPtr<T> >
+: hash< typename nown::NonOwningPtr<T>::pointer > { };
 
 } // namespace std
 

@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 #include <iterator>
+#include <unordered_set>
 
 using namespace std;
 using namespace nown;
@@ -420,6 +421,10 @@ Status test_mixed_types() {
         NonOwningPtr<A> na = a;
         NonOwningPtr<B> nb = b;
 
+        // Test get(NonOwningPtr<>).
+        assert(a == get(na));
+        assert(b == get(nb));
+
         test_mixed_comparison(a, b, expect_not_comparable());
         test_mixed_comparison(na, nb, expect_not_comparable());
 
@@ -547,10 +552,32 @@ Status test_iterator() {
     return Status::ok();
 }
 
+Status test_hash() {
+    using namespace detail;
+    A a[2];
+    NonOwningPtr<A> na0 = &a[0];
+    NonOwningPtr<A> na1 = &a[1];
+    auto hash0 = std::hash<decltype(na0)>{}(na0);
+    auto hash1 = std::hash<decltype(na1)>{}(na1);
+
+    // Note here we're taking advantage of the automatic conversion of na0 to
+    // raw pointer type.
+    auto hash0_raw = std::hash<A*>{}(na0);
+    assert(hash0 == hash0_raw);
+    assert(hash0 != hash1);
+
+    unordered_set<NonOwningPtr<A>> set_of_a = {
+        NonOwningPtr<A>(&a[0]), (A*)&a[0], &a[1], na1
+    };
+    assert(set_of_a.size() == 2);
+    return Status::ok();
+}
+
 int main() {
     Widget w;
     process_and_clear(&w);
     try {
+        check(test_hash());
         check(test_iterator());
         check(test_mixed_types());
         check(test_pointer<void>());
