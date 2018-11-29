@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.1)
 
-project(nonowning_ptr VERSION 1.0.0)
+project(nonowningptr VERSION 1.0.0)
 enable_testing()
 
 set(CMAKE_CXX_STANDARD 11)
@@ -20,22 +20,22 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /WX /EHsc /Od /ZI")
 endif()
 
-set(nonowning_headers
-  ${PROJECT_SOURCE_DIR}/include/nonowning.hpp
-  ${PROJECT_SOURCE_DIR}/include/nonowning-detail.hpp)
+set(nonowningptr_headers
+  ${PROJECT_SOURCE_DIR}/include/nonowningptr.hpp
+  ${PROJECT_SOURCE_DIR}/include/nonowningptr-detail.hpp)
 
-add_library(nonowning_ptr INTERFACE)
-target_sources(nonowning_ptr INTERFACE ${nonowning_headers})
+add_library(nonowningptr INTERFACE)
+target_sources(nonowningptr INTERFACE ${nonowningptr_headers})
 
-target_include_directories(nonowning_ptr INTERFACE
+target_include_directories(nonowningptr INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
 # So Visual Studio has a project for the header-only library.
 # See https://gitlab.kitware.com/cmake/cmake/issues/15234
-add_custom_target(nonowning_ptr-ide SOURCES ${nonowning_headers})
+add_custom_target(nonowningptr-ide SOURCES ${nonowningptr_headers})
 
 add_subdirectory(test)
 
-install(FILES ${nonowning_headers} DESTINATION include)
+install(FILES ${nonowningptr_headers} DESTINATION include)

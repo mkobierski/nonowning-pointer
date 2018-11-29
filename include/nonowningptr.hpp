@@ -7,7 +7,7 @@
 #ifndef NONOWNING_HPP
 #define NONOWNING_HPP
 
-#include "nonowning-detail.hpp"
+#include "nonowningptr-detail.hpp"
 
 #include <cstddef> // nullptr_t, ptrdiff_t
 #include <type_traits>
