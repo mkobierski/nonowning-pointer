@@ -31,7 +31,7 @@ namespace nown { // nonowning
 
 template< typename Type >
 class NonOwningPtr {
-    class delete_ambiguifier;
+    class delete_ambiguator;
 
 public:
     // Follow the convention set by the standard library pointers.
@@ -104,8 +104,8 @@ public:
       to a pointer-to-object, how can the object be deleted?
 
       To ambiguate, we provide an (undefined) implicit conversion to a pointer
-      to private and undefined type `delete_ambiguifier'.  The
-      `delete_ambiguifier' is qualified with const and volatile.  To show that
+      to private and undefined type `delete_ambiguator'.  The
+      `delete_ambiguator' is qualified with const and volatile.  To show that
       this is required, consider the following case if it weren't.
 
           void foo() {
@@ -117,21 +117,21 @@ public:
       but further converting that to a void * discards the const qualifier and
       is therefore disallowed.  However, since we are providing a conversion
       from NonOwningPtr<int const> to pointer to (hypothetically) non-const
-      `delete_ambiguifier', that following conversion sequence works:
+      `delete_ambiguator', that following conversion sequence works:
 
-          NonOwningPtr<int const> -> delete_ambiguifier * -> void *
+          NonOwningPtr<int const> -> delete_ambiguator * -> void *
 
-      To prevent this at link time, the conversion to delete_ambiguifier is left
+      To prevent this at link time, the conversion to delete_ambiguator is left
       undefined.  By making it at least a cv-qualified as the NonOwningPtr's
       pointee-type, though, the conversion will also be disallowed at compile
-      time.  We don't lose the desired effect of ambiguifying delete
+      time.  We don't lose the desired effect of ambiguating delete
       expressions, since in that case const and volatile qualifiers are ignored.
     */
-    constexpr operator delete_ambiguifier const volatile * () const noexcept;
+    constexpr operator delete_ambiguator const volatile * () const noexcept;
 
     /*
-      Should be able to convert to cv-void*, however `delete_ambiguifier' also
-      ambiguifies this case.
+      Should be able to convert to cv-void*, however `delete_ambiguator' also
+      ambiguates this case.
       TODO: explain better.
     */
     constexpr operator void_ptr () const noexcept { return ptr_; }
